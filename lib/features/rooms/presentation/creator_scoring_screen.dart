@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scoring_rooms/features/rooms/models/board_participant.dart';
 import 'package:scoring_rooms/features/rooms/presentation/final_results_screen.dart';
 import 'package:scoring_rooms/features/rooms/providers/room_providers.dart';
 
@@ -20,9 +21,13 @@ class CreatorScoringScreen extends ConsumerStatefulWidget {
 class _CreatorScoringScreenState extends ConsumerState<CreatorScoringScreen> {
   static const _hapticsChannel = MethodChannel('score_haptics');
   Timer? _countdownTicker;
+  Timer? _scoreSyncTimer;
+  bool _syncingScores = false;
   bool _completingTimer = false;
   final Map<String, TextEditingController> _timerDurationControllers = {};
   final Map<String, int> _localScoreOverrides = {};
+  final Map<String, int> _lastSyncedScores = {};
+  List<BoardParticipant> _latestBoards = const [];
   final ScrollController _pageScrollController = ScrollController();
   bool _isNearBottom = false;
   Timer? _brightnessDebounce;
@@ -37,11 +42,15 @@ class _CreatorScoringScreenState extends ConsumerState<CreatorScoringScreen> {
         setState(() {});
       }
     });
+    _scoreSyncTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _syncScoresToBoards();
+    });
   }
 
   @override
   void dispose() {
     _countdownTicker?.cancel();
+    _scoreSyncTimer?.cancel();
     _brightnessDebounce?.cancel();
     _pageScrollController
       ..removeListener(_onScroll)
@@ -115,11 +124,39 @@ class _CreatorScoringScreenState extends ConsumerState<CreatorScoringScreen> {
     _localScoreOverrides.removeWhere(
       (boardId, _) => !activeIds.contains(boardId),
     );
+    _lastSyncedScores.removeWhere((boardId, _) => !activeIds.contains(boardId));
     for (final board in boards) {
       final override = _localScoreOverrides[board.boardId];
       if (override != null && override == board.score) {
         _localScoreOverrides.remove(board.boardId);
       }
+    }
+  }
+
+  Future<void> _syncScoresToBoards() async {
+    if (!mounted || _syncingScores) return;
+    if (_latestBoards.isEmpty) return;
+    _syncingScores = true;
+    try {
+      final controller = ref.read(
+        creatorScoringControllerProvider(widget.roomId),
+      );
+      final futures = <Future<void>>[];
+      for (final board in _latestBoards) {
+        final score = _localScoreOverrides[board.boardId] ?? board.score;
+        final lastSynced = _lastSyncedScores[board.boardId];
+        if (lastSynced == score) continue;
+        _lastSyncedScores[board.boardId] = score;
+        futures.add(
+          controller.setBoardScore(boardId: board.boardId, score: score),
+        );
+      }
+      if (futures.isNotEmpty) {
+        await Future.wait(futures);
+      }
+    } catch (_) {
+    } finally {
+      _syncingScores = false;
     }
   }
 
@@ -221,6 +258,7 @@ class _CreatorScoringScreenState extends ConsumerState<CreatorScoringScreen> {
                 data: (room) {
                   return boardsAsync.when(
                     data: (boards) {
+                      _latestBoards = boards;
                       _syncScoreOverrides(boards);
                       final isStarted = room.status == 'started';
                       final isPaused = room.status == 'paused';
@@ -299,7 +337,7 @@ class _CreatorScoringScreenState extends ConsumerState<CreatorScoringScreen> {
                                       board.timerStatus == 'paused';
                                   final hasBoardTimer =
                                       isBoardTimerRunning || isBoardTimerPaused;
-                                    final displayScore =
+                                  final displayScore =
                                       _localScoreOverrides[board.boardId] ??
                                       board.score;
                                   final boardTimerRemainingMs =

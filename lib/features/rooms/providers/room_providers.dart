@@ -352,6 +352,22 @@ class RoomRepository {
     });
   }
 
+  Future<void> setBoardScore({
+    required String roomId,
+    required String boardId,
+    required int score,
+  }) async {
+    await _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('boards')
+        .doc(boardId)
+        .set({
+          'score': score,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+  }
+
   Future<void> closeScoring(String roomId) async {
     final roomSnapshot = await _firestore.collection('rooms').doc(roomId).get();
     final roomData = roomSnapshot.data() ?? {};
@@ -817,6 +833,14 @@ class CreatorScoringController {
       roomId: roomId,
       boardId: boardId,
       direction: -1,
+    );
+  }
+
+  Future<void> setBoardScore({required String boardId, required int score}) {
+    return repository.setBoardScore(
+      roomId: roomId,
+      boardId: boardId,
+      score: score,
     );
   }
 
