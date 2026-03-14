@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "84494797252",
+    "project_id": "scoring-rooms",
+    "storage_bucket": "scoring-rooms.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:84494797252:android:a1f611ddd4b9d765d1fc91",
+        "android_client_info": {
+          "package_name": "com.example.scoring_rooms"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "84494797252-70pm3663oqh65rh6r4972q2fl8fm5l7e.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.scoring_rooms",
+            "certificate_hash": "254a388c7d906afc0764607d8d72e1e71c502945"
+          }
+        },
+        {
+          "client_id": "84494797252-20t3qhpj1k9umii6ihfsrlv771j2ptcq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3PlfGUeerB53vQScx5y1y0oxQ8vQm3K8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "84494797252-20t3qhpj1k9umii6ihfsrlv771j2ptcq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "84494797252-shm603jq363msjdjd7rpma3d24rubieu.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.scoringRooms"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
