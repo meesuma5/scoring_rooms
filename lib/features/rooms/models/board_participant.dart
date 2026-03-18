@@ -2,6 +2,7 @@ class BoardParticipant {
   const BoardParticipant({
     required this.boardId,
     required this.boardLabel,
+    required this.orderIndex,
     required this.score,
     required this.inRoom,
     required this.brightnessManaged,
@@ -16,6 +17,7 @@ class BoardParticipant {
 
   final String boardId;
   final String boardLabel;
+  final int orderIndex;
   final int score;
   final bool inRoom;
   final bool brightnessManaged;
@@ -35,6 +37,7 @@ class BoardParticipant {
     return BoardParticipant(
       boardId: boardId,
       boardLabel: (data?['boardLabel'] as String?) ?? 'Board',
+      orderIndex: (data?['orderIndex'] as num?)?.toInt() ?? 0,
       score: (data?['score'] as num?)?.toInt() ?? 0,
       inRoom: (data?['inRoom'] as bool?) ?? true,
       brightnessManaged: (data?['brightnessManaged'] as bool?) ?? true,

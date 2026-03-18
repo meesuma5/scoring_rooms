@@ -2,24 +2,70 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scoring_rooms/features/rooms/presentation/creator_scoring_screen.dart';
 import 'package:scoring_rooms/features/rooms/presentation/final_results_screen.dart';
+import 'package:scoring_rooms/features/rooms/models/board_participant.dart';
 import 'package:scoring_rooms/features/rooms/providers/room_providers.dart';
 
-class LobbyScreen extends ConsumerWidget {
+class LobbyScreen extends ConsumerStatefulWidget {
   const LobbyScreen({super.key, required this.roomId});
 
   final String roomId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final roomAsync = ref.watch(roomStreamProvider(roomId));
-    final boardsAsync = ref.watch(roomBoardsProvider(roomId));
+  ConsumerState<LobbyScreen> createState() => _LobbyScreenState();
+}
+
+class _LobbyScreenState extends ConsumerState<LobbyScreen> {
+  final List<String> _pendingBoardOrder = [];
+
+  List<BoardParticipant> _orderedBoards(List<BoardParticipant> boards) {
+    if (_pendingBoardOrder.isEmpty) {
+      return boards;
+    }
+
+    final byId = {for (final board in boards) board.boardId: board};
+
+    final ordered = <BoardParticipant>[];
+    for (final boardId in _pendingBoardOrder) {
+      final board = byId.remove(boardId);
+      if (board != null) {
+        ordered.add(board);
+      }
+    }
+    ordered.addAll(byId.values);
+    return ordered;
+  }
+
+  void _onReorder(
+    List<BoardParticipant> displayBoards,
+    int oldIndex,
+    int newIndex,
+  ) {
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
+
+    final reorderedIds = displayBoards.map((board) => board.boardId).toList();
+    final moved = reorderedIds.removeAt(oldIndex);
+    reorderedIds.insert(newIndex, moved);
+
+    setState(() {
+      _pendingBoardOrder
+        ..clear()
+        ..addAll(reorderedIds);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final roomAsync = ref.watch(roomStreamProvider(widget.roomId));
+    final boardsAsync = ref.watch(roomBoardsProvider(widget.roomId));
 
     return Scaffold(
       appBar: AppBar(title: const Text('Room Lobby')),
       body: RefreshIndicator(
         onRefresh: () async {
-          ref.invalidate(roomStreamProvider(roomId));
-          ref.invalidate(roomBoardsProvider(roomId));
+          ref.invalidate(roomStreamProvider(widget.roomId));
+          ref.invalidate(roomBoardsProvider(widget.roomId));
           await Future<void>.delayed(const Duration(milliseconds: 250));
         },
         child: Padding(
@@ -28,10 +74,13 @@ class LobbyScreen extends ConsumerWidget {
             data: (room) {
               return boardsAsync.when(
                 data: (boards) {
-                  final canStart = boards.length >= 2 && room.status == 'open';
+                  final displayBoards = _orderedBoards(boards);
+                  final canStart =
+                      displayBoards.length >= 2 && room.status == 'open';
                   final hasStarted =
                       room.status == 'started' || room.status == 'paused';
                   final isClosed = room.status == 'closed';
+                  final isOpen = room.status == 'open';
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -41,15 +90,26 @@ class LobbyScreen extends ConsumerWidget {
                       const SizedBox(height: 8),
                       Text('Status: ${room.status.toUpperCase()}'),
                       const SizedBox(height: 8),
-                      Text('Joined Boards: ${boards.length}/${room.maxBoards}'),
+                      Text(
+                        'Joined Boards: ${displayBoards.length}/${room.maxBoards}',
+                      ),
                       const SizedBox(height: 12),
                       Expanded(
-                        child: ListView.builder(
+                        child: ReorderableListView.builder(
+                          buildDefaultDragHandles: false,
                           physics: const AlwaysScrollableScrollPhysics(),
-                          itemCount: boards.length,
+                          itemCount: displayBoards.length,
+                          onReorder: isOpen
+                              ? (oldIndex, newIndex) => _onReorder(
+                                  displayBoards,
+                                  oldIndex,
+                                  newIndex,
+                                )
+                              : (_, __) {},
                           itemBuilder: (context, index) {
-                            final board = boards[index];
+                            final board = displayBoards[index];
                             return ListTile(
+                              key: ValueKey(board.boardId),
                               title: Text('Board ${board.boardLabel}'),
                               subtitle: Text('Score: ${board.score}'),
                               onTap: () async {
@@ -92,7 +152,9 @@ class LobbyScreen extends ConsumerWidget {
 
                                 try {
                                   await ref
-                                      .read(lobbyControllerProvider(roomId))
+                                      .read(
+                                        lobbyControllerProvider(widget.roomId),
+                                      )
                                       .renameBoard(
                                         boardId: board.boardId,
                                         boardLabel: nextLabel,
@@ -158,7 +220,9 @@ class LobbyScreen extends ConsumerWidget {
                                       try {
                                         await ref
                                             .read(
-                                              lobbyControllerProvider(roomId),
+                                              lobbyControllerProvider(
+                                                widget.roomId,
+                                              ),
                                             )
                                             .renameBoard(
                                               boardId: board.boardId,
@@ -176,16 +240,28 @@ class LobbyScreen extends ConsumerWidget {
                                       }
                                     },
                                   ),
-                                  if (room.status == 'open')
+                                  if (isOpen)
                                     IconButton(
                                       icon: const Icon(Icons.close),
                                       onPressed: () {
                                         ref
                                             .read(
-                                              lobbyControllerProvider(roomId),
+                                              lobbyControllerProvider(
+                                                widget.roomId,
+                                              ),
                                             )
                                             .removeBoard(board.boardId);
                                       },
+                                    ),
+                                  if (isOpen)
+                                    ReorderableDragStartListener(
+                                      index: index,
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                        child: Icon(Icons.drag_handle),
+                                      ),
                                     ),
                                 ],
                               ),
@@ -198,7 +274,7 @@ class LobbyScreen extends ConsumerWidget {
                         child: ElevatedButton(
                           onPressed: () async {
                             await ref
-                                .read(lobbyControllerProvider(roomId))
+                                .read(lobbyControllerProvider(widget.roomId))
                                 .identifyBoards();
                           },
                           child: const Text('Identify Boards'),
@@ -210,14 +286,25 @@ class LobbyScreen extends ConsumerWidget {
                         child: ElevatedButton(
                           onPressed: canStart
                               ? () async {
+                                  final orderedBoardIds = displayBoards
+                                      .map((board) => board.boardId)
+                                      .toList();
                                   await ref
-                                      .read(lobbyControllerProvider(roomId))
+                                      .read(
+                                        lobbyControllerProvider(widget.roomId),
+                                      )
+                                      .setBoardOrder(orderedBoardIds);
+                                  await ref
+                                      .read(
+                                        lobbyControllerProvider(widget.roomId),
+                                      )
                                       .startScoring();
                                   if (!context.mounted) return;
                                   Navigator.of(context).pushReplacement(
                                     MaterialPageRoute(
-                                      builder: (_) =>
-                                          CreatorScoringScreen(roomId: roomId),
+                                      builder: (_) => CreatorScoringScreen(
+                                        roomId: widget.roomId,
+                                      ),
                                     ),
                                   );
                                 }
@@ -234,8 +321,12 @@ class LobbyScreen extends ConsumerWidget {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (_) => isClosed
-                                      ? FinalResultsScreen(roomId: roomId)
-                                      : CreatorScoringScreen(roomId: roomId),
+                                      ? FinalResultsScreen(
+                                          roomId: widget.roomId,
+                                        )
+                                      : CreatorScoringScreen(
+                                          roomId: widget.roomId,
+                                        ),
                                 ),
                               );
                             },

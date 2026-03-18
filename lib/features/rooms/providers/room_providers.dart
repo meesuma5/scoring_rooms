@@ -61,11 +61,17 @@ final roomBoardsProvider =
           .doc(roomId)
           .collection('boards')
           .snapshots()
-          .map(
-            (query) => query.docs
+          .map((query) {
+            final boards = query.docs
                 .map((doc) => BoardParticipant.fromMap(doc.id, doc.data()))
-                .toList(),
-          );
+                .toList();
+            boards.sort((a, b) {
+              final byOrder = a.orderIndex.compareTo(b.orderIndex);
+              if (byOrder != 0) return byOrder;
+              return a.boardLabel.compareTo(b.boardLabel);
+            });
+            return boards;
+          });
     });
 
 final lobbyControllerProvider = Provider.family<LobbyController, String>((
@@ -229,6 +235,7 @@ class RoomRepository {
     await boardCollection.doc(boardId).set({
       'boardId': boardId,
       'boardLabel': boardLabel,
+      'orderIndex': boardIndex,
       'score': 0,
       'inRoom': true,
       'brightnessManaged': true,
@@ -285,6 +292,27 @@ class RoomRepository {
           'boardLabel': normalizedLabel,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
+  }
+
+  Future<void> setBoardOrder({
+    required String roomId,
+    required List<String> orderedBoardIds,
+  }) async {
+    final batch = _firestore.batch();
+    final boardsCollection = _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('boards');
+
+    for (var index = 0; index < orderedBoardIds.length; index++) {
+      final boardId = orderedBoardIds[index];
+      batch.set(boardsCollection.doc(boardId), {
+        'orderIndex': index,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+
+    await batch.commit();
   }
 
   Future<void> startScoring(String roomId) async {
@@ -650,7 +678,7 @@ class RoomRepository {
     required String roomId,
     required double brightness,
   }) async {
-    final clamped = brightness.clamp(0.05, 1.0) as double;
+    final clamped = brightness.clamp(0.05, 1.0);
     await _firestore.collection('rooms').doc(roomId).set({
       'boardBrightness': clamped,
       'lastActivityAt': FieldValue.serverTimestamp(),
@@ -781,6 +809,13 @@ class LobbyController {
 
   Future<void> startScoring() {
     return repository.startScoring(roomId);
+  }
+
+  Future<void> setBoardOrder(List<String> orderedBoardIds) {
+    return repository.setBoardOrder(
+      roomId: roomId,
+      orderedBoardIds: orderedBoardIds,
+    );
   }
 
   Future<void> identifyBoards() {
